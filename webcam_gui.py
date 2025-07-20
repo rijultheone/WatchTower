@@ -4,8 +4,12 @@ import datetime
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
+from tkinter import filedialog
 from PIL import Image, ImageTk  # pillow is required
 import collections
+import os
+import platform
+from pathlib import Path
 
 
 class WebcamMonitor:
@@ -25,11 +29,16 @@ class WebcamMonitor:
 
         # Store parameter variables (only adjustable via Settings dialog)
         self.min_area_var = tk.IntVar(value=5000)
-        self.pre_buffer_var = tk.IntVar(value=35)
-        self.post_buffer_var = tk.IntVar(value=15)
+        self.pre_buffer_var = tk.IntVar(value=10)
+        self.post_buffer_var = tk.IntVar(value=10)
 
         # Camera index variable (for settings)
         self.cam_index_var = tk.IntVar(value=0)
+
+        # Destination directory for recordings
+        default_dir = Path.home() / "Videos" / "SecCam"
+        default_dir.mkdir(parents=True, exist_ok=True)
+        self.destination_dir = tk.StringVar(value=str(default_dir))
 
         self.status_var = tk.StringVar(value="Idle")
         ttk.Label(root, textvariable=self.status_var).pack(pady=(0, 5))
@@ -42,6 +51,25 @@ class WebcamMonitor:
         self.stop_btn.grid(row=0, column=1, padx=5)
         self.settings_btn = ttk.Button(btn_frame, text="Settings", command=self.toggle_settings)
         self.settings_btn.grid(row=0, column=2, padx=5)
+        self.export_btn = ttk.Button(btn_frame, text="Export Log", command=self.export_log)
+        self.export_btn.grid(row=0, column=3, padx=5)
+
+        # ==== Detection list ====
+        list_frame = ttk.Frame(root)
+        list_frame.pack(fill="both", expand=True, padx=5, pady=(0, 10))
+        ttk.Label(list_frame, text="Detections (double-click to open)").pack(anchor="w")
+
+        self.detection_list = tk.Listbox(list_frame, height=8)
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.detection_list.yview)
+        self.detection_list.configure(yscrollcommand=scrollbar.set)
+        self.detection_list.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        self.detection_list.bind("<Double-Button-1>", self.open_selected_clip)
+
+        # Internal list to keep metadata about detections (dicts with timestamp & filename)
+        self.detections = []
+
         # Settings window reference
         self.settings_win = None
 
@@ -59,6 +87,15 @@ class WebcamMonitor:
         self.frame_width = 0
         self.frame_height = 0
         self.fps = 30.0
+        # Inter-frame delay for GUI update (ms). Will use minimal delay to pull frames as fast as the camera provides.
+        self.frame_delay = 1
+
+        # Always record option
+        self.always_record_var = tk.BooleanVar(value=True)
+
+        # Master recording writer
+        self.master_recording = False
+        self.master_out = None
 
         self.update_job = None
 
@@ -83,6 +120,8 @@ class WebcamMonitor:
         self.frame_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps_from_cam = self.cap.get(cv2.CAP_PROP_FPS)
         self.fps = fps_from_cam if fps_from_cam > 0 else 30.0
+        # Use minimal delay (1 ms). Rely on camera/internal rate for frame pacing.
+        self.frame_delay = 1
 
         # Pre/Post buffer frame calculations
         self.pre_buffer_frames = int(self.pre_buffer_var.get() * self.fps)
@@ -100,6 +139,10 @@ class WebcamMonitor:
         # Start frame loop
         self.update_frame()
 
+        # Start master recording if option enabled
+        if self.always_record_var.get() and not self.master_recording:
+            self._start_master_recording()
+
     # ------------------------------------------------------------------
     def stop(self):
         if not self.running:
@@ -111,6 +154,8 @@ class WebcamMonitor:
             self.update_job = None
         self._release_resources()
         self.video_label.configure(image="")
+        # Stop master recording if running
+        self._stop_master_recording()
         self.status_var.set("Stopped")
         self.start_btn.config(state="normal")
         self.stop_btn.config(state="disabled")
@@ -138,6 +183,9 @@ class WebcamMonitor:
         for (x, y, w, h) in self.face_cascade.detectMultiScale(gray, 1.3, 5):
             human_detected = True
             cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+            # Label the detected human
+            label_y = y - 10 if y - 10 > 10 else y + h + 20
+            cv2.putText(frame, "Human", (x, label_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
 
         # Motion detection
         motion_detected = False
@@ -155,14 +203,21 @@ class WebcamMonitor:
             cv2.putText(frame, "Motion/Human Detected", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             self.frames_since_last_detection = 0
             if not self.recording:
-                filename = datetime.datetime.now().strftime("recording_%Y%m%d_%H%M%S.avi")
+                filename_only = datetime.datetime.now().strftime("recording_%Y%m%d_%H%M%S.avi")
+                filepath = os.path.join(self.destination_dir.get(), filename_only)
+                # Ensure directory exists (user might have typed new path without browsing)
+                Path(self.destination_dir.get()).mkdir(parents=True, exist_ok=True)
                 fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                self.out = cv2.VideoWriter(filename, fourcc, self.fps, (self.frame_width, self.frame_height))
+                self.out = cv2.VideoWriter(filepath, fourcc, self.fps, (self.frame_width, self.frame_height))
                 # Write pre-buffer frames first
                 if self.frame_buffer is not None:
                     for bf in self.frame_buffer:
                         self.out.write(bf)
                 self.recording = True
+                # Log this detection
+                timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self.detections.append({"timestamp": timestamp_str, "filename": filepath})
+                self.detection_list.insert(tk.END, f"{timestamp_str} – {filename_only}")
         else:
             if self.recording:
                 self.frames_since_last_detection += 1
@@ -180,7 +235,15 @@ class WebcamMonitor:
         self.video_label.configure(image=img)
 
         # Schedule next frame
-        self.update_job = self.root.after(15, self.update_frame)
+        self.update_job = self.root.after(self.frame_delay, self.update_frame)
+
+        # If master recording on, write raw frame
+        if self.master_recording and self.master_out is not None:
+            # Overlay current timestamp on the frame
+            time_str = datetime.datetime.now().strftime("%H:%M:%S")
+            overlay_frame = raw_frame.copy()
+            cv2.putText(overlay_frame, time_str, (10, self.frame_height - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            self.master_out.write(overlay_frame)
 
     # ------------------------------------------------------------------
     def _stop_recording(self):
@@ -233,8 +296,85 @@ class WebcamMonitor:
         ttk.Label(self.settings_win, text="Post-record buffer (s):").grid(row=row, column=0, sticky="w", padx=5, pady=5)
         ttk.Entry(self.settings_win, textvariable=self.post_buffer_var, width=10).grid(row=row, column=1, padx=5, pady=5)
 
+        # Always record checkbox
         row += 1
-        ttk.Button(self.settings_win, text="Close", command=self.settings_win.destroy).grid(row=row, column=0, columnspan=2, pady=10)
+        ttk.Checkbutton(self.settings_win, text="Always record (master clip)", variable=self.always_record_var).grid(row=row, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+
+        # Destination directory row
+        row += 1
+        ttk.Label(self.settings_win, text="Save directory:").grid(row=row, column=0, sticky="w", padx=5, pady=5)
+        dir_entry = ttk.Entry(self.settings_win, textvariable=self.destination_dir, width=30)
+        dir_entry.grid(row=row, column=1, padx=5, pady=5)
+        ttk.Button(self.settings_win, text="Browse…", command=self._browse_destination).grid(row=row, column=2, padx=5, pady=5)
+
+        row += 1
+        ttk.Button(self.settings_win, text="Close", command=self.settings_win.destroy).grid(row=row, column=0, columnspan=3, pady=10)
+
+    # ------------------------------------------------------------------
+    def open_selected_clip(self, event=None):
+        selection = self.detection_list.curselection()
+        if not selection:
+            return
+        idx = selection[0]
+        clip_path = self.detections[idx]["filename"]
+        try:
+            if platform.system() == "Windows":
+                os.startfile(clip_path)
+            elif platform.system() == "Darwin":
+                import subprocess
+                subprocess.Popen(["open", clip_path])
+            else:
+                import subprocess
+                subprocess.Popen(["xdg-open", clip_path])
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open clip:\n{e}")
+
+    # ------------------------------------------------------------------
+    def export_log(self):
+        if not self.detections:
+            messagebox.showinfo("Export Log", "No detections to export yet.")
+            return
+        filepath = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv"), ("All files", "*.*")])
+        if not filepath:
+            return  # user cancelled
+        try:
+            import csv
+            with open(filepath, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Timestamp", "Filename"])
+                for det in self.detections:
+                    writer.writerow([det["timestamp"], det["filename"]])
+            messagebox.showinfo("Export Log", f"Log exported to {filepath}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to export log:\n{e}")
+
+    # ------------------------------------------------------------------
+    def _browse_destination(self):
+        selected = filedialog.askdirectory(initialdir=self.destination_dir.get() or str(Path.home()), title="Select destination folder")
+        if selected:
+            self.destination_dir.set(selected)
+            # Ensure directory exists
+            Path(selected).mkdir(parents=True, exist_ok=True)
+
+    # ------------------------------------------------------------------
+    def _start_master_recording(self):
+        if self.master_recording:
+            return
+        filename_only = datetime.datetime.now().strftime("master_%Y%m%d_%H%M%S.avi")
+        filepath = os.path.join(self.destination_dir.get(), filename_only)
+        Path(self.destination_dir.get()).mkdir(parents=True, exist_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        self.master_out = cv2.VideoWriter(filepath, fourcc, self.fps, (self.frame_width, self.frame_height))
+        if self.master_out.isOpened():
+            self.master_recording = True
+
+    # ------------------------------------------------------------------
+    def _stop_master_recording(self):
+        if self.master_recording:
+            self.master_recording = False
+            if self.master_out is not None:
+                self.master_out.release()
+                self.master_out = None
 
 
 # ============================================================================

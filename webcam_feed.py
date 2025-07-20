@@ -43,6 +43,9 @@ def main():
             for (x, y, w, h) in face_cascade.detectMultiScale(gray, 1.3, 5):
                 human_detected = True
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+                # Label the detected human
+                label_y = y - 10 if y - 10 > 10 else y + h + 20
+                cv2.putText(frame, "Human", (x, label_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
 
             # Motion detection
             motion_detected = False
