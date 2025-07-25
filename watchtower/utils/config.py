@@ -14,9 +14,12 @@ class Config:
 
     def _load_default_config(self) -> Dict[str, Any]:
         """Load default configuration."""
+        # Use USERPROFILE environment variable for Windows compatibility
+        import os
+        default_path = os.path.join(os.environ.get('USERPROFILE', str(Path.home())), 'WatchTower', 'Recordings')
         return {
             "camera_index": 0,
-            "output_folder": str(Path.home() / "Videos" / "SecCam"),
+            "output_folder": default_path,  # Will resolve to C:\Users\<CurrentUser>\WatchTower\Recordings
             "min_motion_area": 5000,
             "pre_buffer_seconds": 10,
             "post_buffer_seconds": 10,
@@ -75,7 +78,9 @@ class Config:
     @property
     def output_folder(self) -> str:
         """Get output folder."""
-        return self.get("output_folder", str(Path.home() / "Videos" / "SecCam"))
+        import os
+        default_path = os.path.join(os.environ.get('USERPROFILE', str(Path.home())), 'WatchTower', 'Recordings')
+        return self.get("output_folder", default_path)
 
     @output_folder.setter
     def output_folder(self, value: str) -> None:
