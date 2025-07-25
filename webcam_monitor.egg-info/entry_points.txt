@@ -1,0 +1,2 @@
+[console_scripts]
+webcam-monitor = webcam_monitor.main:main
