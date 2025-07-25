@@ -1,10 +1,10 @@
-Metadata-Version: 2.4
+Metadata-Version: 1.0
 Name: watchtower
 Version: 1.0.0
 Summary: A desktop security application for motion and human detection using webcam
 Home-page: https://github.com/yourusername/watchtower
-Author: Your Name
-Author-email: Your Name <your.email@example.com>
+Author: JINX
+Author-email: JINX <rijul.creates@gmail.com>
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent

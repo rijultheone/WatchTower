@@ -28,7 +28,7 @@ from ..utils.app_info import (
 class MainWindow:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Webcam Monitor – Motion & Human Detection")
+        self.root.title("Watchtower")
         
         # Initialize components
         self.config = Config()

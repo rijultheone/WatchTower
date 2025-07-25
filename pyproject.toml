@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "watchtower"
-version = "1.0.0"
+version = "1.0.0.b"
 authors = [
-    { name="Your Name", email="your.email@example.com" },
+    { name="JINX", email="rijul.creates@gmail.com" },
 ]
 description = "A desktop security application for motion and human detection using webcam"
 readme = "README.md"

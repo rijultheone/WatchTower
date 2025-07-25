@@ -12,7 +12,7 @@ from ..utils.video import frame_to_tkimage
 class SetupWizard:
     def __init__(self, parent: tk.Tk):
         self.window = tk.Toplevel(parent)
-        self.window.title("First-Time Setup Wizard")
+        self.window.title("Setup Wizard")
         self.window.geometry("500x400")
         self.window.resizable(False, False)
         self.window.transient(parent)
