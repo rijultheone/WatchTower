@@ -12,47 +12,7 @@ A powerful desktop security application that uses your webcam for real-time moni
 - Background operation mode
 - User-friendly GUI with live preview
 
-## Requirements
 
-- Python 3.7 or higher
-- OpenCV
-- NumPy
-- Pillow (PIL)
-- Tkinter (usually comes with Python)
-
-## Installation
-
-### From Source
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/watchtower.git
-cd watchtower
-```
-
-2. Create a virtual environment (recommended):
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install the package:
-```bash
-pip install -e .
-```
-
-### Using pip
-
-```bash
-pip install watchtower
-```
-
-## Usage
-
-1. Start the application:
-```bash
-watchtower
-```
 
 2. On first run, the setup wizard will help you configure:
    - Camera selection
@@ -68,31 +28,6 @@ watchtower
    - Ctrl + B: Run in background
    - S: Open settings
 
-## Project Structure
-
-```
-watchtower/
-├── watchtower/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── gui/
-│   │   ├── __init__.py
-│   │   ├── main_window.py
-│   │   ├── wizard.py
-│   │   └── settings.py
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── camera.py
-│   │   ├── detection.py
-│   │   └── recording.py
-│   └── utils/
-│       ├── __init__.py
-│       ├── config.py
-│       └── video.py
-├── setup.py
-├── README.md
-└── requirements.txt
-```
 
 ## Configuration
 
